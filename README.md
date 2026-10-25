@@ -3,6 +3,23 @@
 An agent that audits a **public GitHub repository** for DevOps best-practice violations and writes an
 evidence-based JSON report.
 
+
+## Example run and sample report
+
+The agent was run on [ahmedhanbal/student-ml-api](https://github.com/ahmedhanbal/student-ml-api) using the GitHub Actions
+workflow in [`.github/workflows/audit.yml`](.github/workflows/audit.yml). The workflow is triggered manually with a
+repository URL. It lints and tests the agent, then runs `agent.py` against the target with the API key and model
+settings taken from the `audit` GitHub Environment. The [workflow run](https://github.com/ahmedhanbal/mlops-a2-agent/actions/runs/40214910499)
+succeeded and published a
+[GitHub Release](https://github.com/ahmedhanbal/mlops-a2-agent/releases/tag/audit-ahmedhanbal-student-ml-api-40214910499).
+The release description summarises the report (target repository, workflow run link, severity counts and the top
+findings) and attaches `report.json`, `sample_report.json` and the redacted tool-call trace `trace.jsonl`.
+
+The report from that release is committed in this repository as [`sample_report.json`](sample_report.json). It is
+unedited agent output. The attached trace shows every tool call the model chose and how it interpreted the results.
+
+# Run
+
 ```
 python agent.py --repo https://github.com/<owner>/<repo> --output report.json
 ```

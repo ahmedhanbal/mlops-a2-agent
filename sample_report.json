@@ -1,0 +1,35 @@
+{
+  "repository": "https://github.com/ahmedhanbal/student-ml-api",
+  "violations": [
+    {
+      "rule_id": "CI-001",
+      "category": "github_actions_ci",
+      "severity": "medium",
+      "file": ".github/workflows/ci.yml",
+      "line": 7,
+      "description": "The CI workflow's push trigger only targets feature/** branches, so pushes to the default branch main are never validated by CI.",
+      "evidence": "ci.yml lines 3-7: 'on: pull_request: branches: [main]' and 'push: branches: [feature/**]'. The repository default branch is main (git_status). A direct push/merge commit to main does not match any push branch filter, so CI (lint-free but test+Docker validation) is skipped on main.",
+      "recommendation": "Add main to the push branch filter, e.g. 'push: branches: [main, \"feature/**\"]', so every commit landing on the default branch is validated."
+    },
+    {
+      "rule_id": "QUAL-001",
+      "category": "code_quality",
+      "severity": "low",
+      "file": null,
+      "line": null,
+      "description": "No linting or formatting tooling is configured or executed anywhere in the repository.",
+      "evidence": "The tracked file set is exactly: .dockerignore, .github/workflows/ci.yml, .github/workflows/release.yml, .gitignore, Assignment1_Report.pdf, Dockerfile, README.md, VERSION, app.py, requirements.txt, tests/test_app.py. There is no pyproject.toml, setup.cfg, tox.ini, ruff.toml, .flake8, .pre-commit-config.yaml, or Makefile, and requirements.txt (fastapi, uvicorn, pydantic, httpx, pytest) declares no linter/formatter. Neither ci.yml nor release.yml contains a lint/format step (parse_workflow reports 'lint: none' for both).",
+      "recommendation": "Add ruff (or flake8/black) with a minimal config and a lint step in ci.yml so style/quality issues are caught automatically."
+    },
+    {
+      "rule_id": "QUAL-002",
+      "category": "code_quality",
+      "severity": "low",
+      "file": "app.py",
+      "line": 15,
+      "description": "Version identifiers are defined as constants (APP_VERSION from VERSION, MODEL_VERSION) but the /health handler hardcodes the same literals instead of using them, leaving MODEL_VERSION unused and the version duplicated in three places.",
+      "evidence": "app.py:14 'APP_VERSION = read_version()', app.py:15 'MODEL_VERSION = \"model-1\"', but the health handler at app.py:43-48 builds the payload with literal strings 'application_version': '1.1.0' and 'model_version': 'model-1'. MODEL_VERSION is never referenced anywhere; search_code shows only the definition and the literal. VERSION file is '1.1.0'. A future VERSION bump changes APP_VERSION/api docs but not the health response.",
+      "recommendation": "Use the constants in the health payload, e.g. 'application_version': APP_VERSION, 'model_version': MODEL_VERSION, so version reporting has a single source of truth."
+    }
+  ]
+}
