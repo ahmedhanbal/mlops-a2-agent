@@ -1,0 +1,113 @@
+name: Audit repository
+on:
+  workflow_dispatch:
+    inputs:
+      repo_url:
+        description: "Public GitHub repository URL, e.g. https://github.com/owner/repo"
+        required: true
+        type: string
+      model:
+        description: "Optional model override (default deepseek-flash)"
+        required: false
+        default: ""
+        type: string
+      max_steps:
+        description: "Maximum agent turns"
+        required: false
+        default: "40"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Test agent and audit target
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: audit
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint and test the agent
+        run: |
+          ruff check .
+          pytest
+
+      - name: Run the audit
+        env:
+          REPO_URL: ${{ inputs.repo_url }}
+          MAX_STEPS: ${{ inputs.max_steps }}
+          LLM_MODEL: ${{ inputs.model || vars.LLM_MODEL }}
+          LLM_PROVIDER: ${{ vars.LLM_PROVIDER }}
+          LLM_BASE_URL: ${{ vars.LLM_BASE_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          mkdir -p out
+          python agent.py --repo "$REPO_URL" --output out/report.json \
+            --trace out/trace.jsonl --max-steps "$MAX_STEPS"
+
+      - name: Build release notes and files
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          AGENT_SHA: ${{ github.sha }}
+        run: |
+          cp out/report.json out/sample_report.json
+          python scripts/release_notes.py out/report.json \
+            --run-url "$RUN_URL" --agent-sha "$AGENT_SHA" --output out/release_notes.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: audit-output
+          path: out/
+          if-no-files-found: error
+
+      - name: Keep the trace for debugging a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-trace-failed
+          path: out/trace.jsonl
+          if-no-files-found: ignore
+
+  release:
+    name: Publish release
+    needs: audit # only runs when the audit succeeded
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # the only job that can write; it has no LLM secrets
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: audit-output
+          path: out
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO_URL: ${{ inputs.repo_url }}
+          RUN_ID: ${{ github.run_id }}
+          TARGET_SHA: ${{ github.sha }}
+        run: |
+          slug=$(printf '%s' "$REPO_URL" \
+            | sed -E 's#^(https?://)?(www\.)?github\.com/##; s#/tree/.*$##; s#(\.git)?/?$##; s#[^A-Za-z0-9._-]+#-#g' \
+            | cut -c1-60)
+          tag="audit-${slug}-${RUN_ID}"
+          gh release create "$tag" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$TARGET_SHA" \
+            --title "Audit: ${slug} (run ${RUN_ID})" \
+            --notes-file out/release_notes.md \
+            out/report.json out/sample_report.json out/trace.jsonl
