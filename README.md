@@ -18,12 +18,6 @@ findings) and attaches `report.json`, `sample_report.json` and the redacted tool
 The report from that release is committed in this repository as [`sample_report.json`](sample_report.json). It is
 unedited agent output. The attached trace shows every tool call the model chose and how it interpreted the results.
 
-# Run
-
-```
-python agent.py --repo https://github.com/<owner>/<repo> --output report.json
-```
-
 ## Install
 
 Requires Python 3.10+ and `git` on `PATH`.
